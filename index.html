@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ضغط الصور أونلاين</title>
+<style>
+    :root{
+        --main:#c23bff;
+        --main-dark:#9a2bd7;
+        --bg:#f9f5ff;
+        --white:#fff;
+        --radius:14px;
+        --warn-bg:#ffe9f9;
+        --warn:#d80077;
+    }
+    *{box-sizing:border-box;font-family:'Segoe UI',Tahoma,sans-serif}
+    body{
+        margin:0;background:var(--bg);display:flex;min-height:100vh;
+        flex-direction:column;align-items:center;justify-content:flex-start;
+        padding:2rem 1rem;color:#333}
+    h1{color:var(--main-dark);margin-bottom:1rem}
+    .card{background:var(--white);width:100%;max-width:560px;border-radius:var(--radius);
+        box-shadow:0 10px 25px rgba(0,0,0,.08);padding:2rem}
+    label{display:block;margin:.8rem 0 .3rem;font-weight:600}
+    input[type="file"]{padding:.6rem;border:2px dashed var(--main);
+        border-radius:var(--radius);width:100%;background:#fafafa;cursor:pointer;color:#555}
+    input[type="number"]{width:100%;padding:.7rem;border:2px solid var(--main);
+        border-radius:var(--radius);font-size:1rem}
+    button{padding:.9rem 2rem;margin-top:1.2rem;border:none;border-radius:var(--radius);
+        background:var(--main);color:var(--white);font-size:1rem;cursor:pointer;transition:.2s}
+    button:hover{background:var(--main-dark)}
+    button:disabled{opacity:.55;cursor:not-allowed}
+    .stats{margin-top:1.5rem;background:#faf4ff;padding:1rem;border-radius:var(--radius);
+        font-size:.95rem;line-height:1.8}
+    .warn{display:none;margin-top:.6rem;background:var(--warn-bg);color:var(--warn);
+        padding:.6rem;border-radius:var(--radius);font-size:.9rem}
+    a.download{display:inline-block;margin-top:1rem;text-decoration:none;
+        background:var(--main-dark);color:var(--white);padding:.8rem 1.6rem;border-radius:var(--radius)}
+    footer{margin-top:2.5rem;font-size:.9rem;color:#666}
+</style>
+</head>
+<body>
+
+<h1>أداة ضغط الصور</h1>
+
+<div class="card">
+    <label>➀ ارفع الصورة:</label>
+    <input type="file" id="imgInput" accept="image/*" />
+
+    <label>➁ الحجم المطلوب (KB):</label>
+    <input type="number" id="sizeInput" placeholder="مثال: 200" min="1"/>
+    <div id="warnMsg" class="warn"></div>
+
+    <button id="compressBtn" disabled>ضغط الصورة</button>
+
+    <div class="stats" id="stats" style="display:none;"></div>
+    <a id="downloadLink" class="download" style="display:none;">تحميل الصورة المضغوطة</a>
+</div>
+
+<footer>Made by menari moh</footer>
+
+<script>
+const imgInput      = document.getElementById('imgInput');
+const sizeInput     = document.getElementById('sizeInput');
+const warnMsg       = document.getElementById('warnMsg');
+const compressBtn   = document.getElementById('compressBtn');
+const statsBox      = document.getElementById('stats');
+const downloadLink  = document.getElementById('downloadLink');
+
+let originalFile = null;
+let originalSizeKB = 0;
+
+imgInput.addEventListener('change', (e)=>{
+    const file = e.target.files[0];
+    resetUI();
+    if(!file) return;
+
+    if(!file.type.startsWith('image/')){
+        alert('الملف يجب أن يكون صورة');
+        imgInput.value='';
+        return;
+    }
+    originalFile   = file;
+    originalSizeKB = (file.size/1024).toFixed(1);
+
+    statsBox.style.display='block';
+    statsBox.innerHTML = `حجم الصورة الأصلي: <b>${originalSizeKB} KB</b>`;
+    validateInput();
+});
+
+sizeInput.addEventListener('input', validateInput);
+
+compressBtn.addEventListener('click', async ()=>{
+    const desiredKB = parseFloat(sizeInput.value);
+    compressBtn.textContent='... جاري الضغط';
+    compressBtn.disabled=true;
+
+    try{
+        const {blob,quality} = await compressImage(originalFile, desiredKB*1024);
+        const compressedSizeKB = (blob.size/1024).toFixed(1);
+        const qualityPct = Math.round(quality*100);
+
+        const url = URL.createObjectURL(blob);
+        downloadLink.href = url;
+        downloadLink.download = 'compressed_'+originalFile.name.split('.').slice(0,-1).join('.')+'.jpg';
+
+        statsBox.innerHTML = `
+            حجم الصورة الأصلي: <b>${originalSizeKB} KB</b><br>
+            الحجم بعد الضغط: <b>${compressedSizeKB} KB</b><br>
+            جودة الضغط المُستخدمة: <b>${qualityPct}%</b>
+        `;
+        downloadLink.style.display='inline-block';
+    }catch(err){
+        alert('حدث خطأ أثناء الضغط: '+err.message);
+        console.error(err);
+    }finally{
+        compressBtn.textContent='ضغط الصورة';
+        validateInput();
+    }
+});
+
+function validateInput(){
+    const desiredKB = parseFloat(sizeInput.value);
+    const invalid   = originalFile && desiredKB && desiredKB >= originalSizeKB;
+
+    if(invalid){
+        warnMsg.style.display='block';
+        warnMsg.textContent = `⚠︎ الحجم المطلوب (${desiredKB} KB) أكبر من الحجم الأصلي (${originalSizeKB} KB).`;
+    }else{
+        warnMsg.style.display='none';
+    }
+    compressBtn.disabled = !(originalFile && desiredKB && desiredKB < originalSizeKB);
+}
+
+function compressImage(file, targetBytes){
+    const img = new Image();
+    const reader = new FileReader();
+
+    return new Promise((resolve, reject)=>{
+        reader.onload = e=>{ img.src = e.target.result; };
+        reader.onerror = ()=> reject(new Error('فشل قراءة الصورة'));
+        img.onload = async ()=>{
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx.drawImage(img,0,0);
+
+            let minQ = 0.1, maxQ = 0.95, bestBlob=null, bestQ=minQ;
+            for(let i=0;i<7;i++){
+                const midQ = (minQ+maxQ)/2;
+                const blob = await canvasToBlob(canvas, midQ);
+                if(blob.size > targetBytes){
+                    maxQ = midQ;
+                }else{
+                    bestBlob = blob;
+                    bestQ = midQ;
+                    minQ = midQ;
+                }
+            }
+            if(!bestBlob) bestBlob = await canvasToBlob(canvas, bestQ);
+            resolve({blob:bestBlob,quality:bestQ});
+        };
+        img.onerror = ()=> reject(new Error('صورة غير صالحة'));
+        reader.readAsDataURL(file);
+    });
+}
+function canvasToBlob(canvas, quality){
+    return new Promise(res=> canvas.toBlob(res, 'image/jpeg', quality));
+}
+function resetUI(){
+    statsBox.style.display='none';
+    downloadLink.style.display='none';
+    statsBox.innerHTML='';
+    warnMsg.style.display='none';
+    sizeInput.value='';
+    compressBtn.disabled=true;
+}
+</script>
+</body>
+</html>
