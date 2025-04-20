@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<title>ضغط الصور أونلاين</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600&display=swap');
+:root{--main:#c445fa;--main-dark:#8e2de2;--bg:#f9f6ff;--radius:12px;}
+*{box-sizing:border-box;font-family:'Cairo',sans-serif;}
+body{margin:0;min-height:100vh;background:var(--bg);display:flex;justify-content:center;align-items:center;padding:20px;color:#222;}
+.container{width:100%;max-width:500px;background:#fff;border-radius:var(--radius);box-shadow:0 6px 20px rgba(0,0,0,.12);overflow:hidden;}
+header{background:linear-gradient(135deg,var(--main),var(--main-dark));color:#fff;text-align:center;padding:24px;}
+main{padding:24px;}
+label{font-weight:600;display:block;margin:16px 0 6px;}
+input[type="file"],select{width:100%;padding:12px;font-size:1rem;border-radius:var(--radius);border:2px dashed var(--main);background:#fafafa;cursor:pointer;}
+select{border-style:solid;}
+input:disabled,select:disabled{opacity:.6;cursor:not-allowed;}
+button{width:100%;padding:14px;margin-top:24px;border:none;border-radius:var(--radius);background:var(--main);color:#fff;font-size:1.1rem;cursor:pointer;transition:.3s;}
+button:disabled{opacity:.5;cursor:not-allowed;}
+button:hover:not(:disabled){background:var(--main-dark);}
+.results{margin-top:24px;border-top:1px solid #eee;padding-top:16px;font-size:.95rem;line-height:1.8;display:none;}
+.results span{font-weight:600;color:var(--main-dark);}
+.hide{display:none;}
+#downloadLink{display:none;margin-top:12px;text-align:center;background:#fff;border:2px solid var(--main);color:var(--main-dark);padding:10px;border-radius:var(--radius);text-decoration:none;font-weight:600;transition:.3s;}
+#downloadLink:hover{background:var(--main);color:#fff;}
+footer{text-align:center;padding:14px 6px;font-size:.85rem;color:#777;}
+</style>
+</head>
+<body>
+<div class="container">
+        <header><h1>أداة ضغط الصور</h1></header>
+        <main>
+                <label for="fileInput">١. ارفع الصورة</label>
+                <input type="file" id="fileInput" accept="image/*">
+
+                <label for="factorSelect">٢. اختر مستوى الضغط</label>
+                <select id="factorSelect" disabled>
+                        <option value="">— اختر —</option>
+                        <option value="2">ضغط 2× (نصف الحجم تقريبًا)</option>
+                        <option value="3">ضغط 3×</option>
+                        <option value="4">ضغط 4×</option>
+                </select>
+
+                <button id="compressBtn" disabled>اضغط الآن</button>
+
+                <div class="results" id="results">
+                        <div id="origLine">الحجم الأصلي: <span id="originalSize">-</span> MB</div>
+                        <div id="compLine" class="hide">الحجم بعد الضغط: <span id="compressedSize">-</span> MB</div>
+                        <div id="qualLine" class="hide">جودة الضغط المستخدمة: <span id="quality">-</span></div>
+                        <a id="downloadLink">تحميل الصورة المضغوطة ↧</a>
+                </div>
+        </main>
+        <footer>Made by menari moh</footer>
+</div>
+
+<script>
+/* عناصر DOM */
+const fileInput    = document.getElementById('fileInput');
+const factorSelect = document.getElementById('factorSelect');
+const compressBtn  = document.getElementById('compressBtn');
+
+const resultsBox   = document.getElementById('results');
+const compLine     = document.getElementById('compLine');
+const qualLine     = document.getElementById('qualLine');
+
+const originalSize   = document.getElementById('originalSize');
+const compressedSize = document.getElementById('compressedSize');
+const qualityLbl     = document.getElementById('quality');
+const downloadLink   = document.getElementById('downloadLink');
+
+/* متغيّرات */
+let originalFile, originalBytes;
+
+/* مساعد لتحويل البايت إلى ميجابايت بدقتين عشريتين */
+const toMB = bytes => (bytes / (1024 * 1024)).toFixed(2);
+
+/* 1) رفع الصورة */
+fileInput.addEventListener('change', e=>{
+        originalFile = e.target.files[0];
+        if(!originalFile) return;
+
+        originalBytes = originalFile.size;
+        originalSize.textContent = toMB(originalBytes);
+
+        /* إظهار سطر الحجم الأصلي فقط */
+        resultsBox.style.display = 'block';
+        compLine.classList.add('hide');
+        qualLine.classList.add('hide');
+        downloadLink.style.display = 'none';
+
+        factorSelect.disabled = false;
+        compressBtn.disabled  = false;
+});
+
+/* 2) الضغط */
+compressBtn.addEventListener('click', ()=>{
+        if(!originalFile) return;
+        const factor = parseInt(factorSelect.value);
+        if(!factor){ alert('رجاءً اختر مستوى الضغط.'); return; }
+
+        const targetBytes = originalBytes / factor;
+
+        compressImage(originalFile, targetBytes)
+                .then(({blob,quality})=>{
+                        compressedSize.textContent = toMB(blob.size);
+                        qualityLbl.textContent     = Math.round(quality*100)+'%';
+
+                        compLine.classList.remove('hide');
+                        qualLine.classList.remove('hide');
+
+                        downloadLink.href = URL.createObjectURL(blob);
+                        downloadLink.download = 'compressed_'+originalFile.name.replace(/\s+/g,'_');
+                        downloadLink.style.display='block';
+                })
+                .catch(err=>alert('حدث خطأ: '+err.message));
+});
+
+/* وظيفة الضغط التدريجي بخفض الجودة */
+function compressImage(file, targetBytes){
+        return new Promise((resolve,reject)=>{
+                const img = new Image();
+                img.onload = ()=>{
+                        const canvas = document.createElement('canvas');
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        canvas.getContext('2d').drawImage(img,0,0);
+
+                        let q = 0.9, step = 0.05;
+                        (function attempt(){
+                                canvas.toBlob(b=>{
+                                        if(!b) return reject(new Error('فشل إنشاء Blob'));
+                                        if(b.size > targetBytes && q > step){
+                                                q -= step;
+                                                attempt();
+                                        }else{
+                                                resolve({blob:b,quality:q});
+                                        }
+                                },'image/jpeg',q);
+                        })();
+                };
+                img.onerror = reject;
+                img.src = URL.createObjectURL(file);
+        });
+}
+</script>
+</body>
+</html>
